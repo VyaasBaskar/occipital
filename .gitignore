@@ -1,0 +1,12 @@
+.cache/
+.config/
+.dotnet/
+.vscode-server/
+runs/
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.sudo_as_admin_successful
+frame.png
+hippoenv/
