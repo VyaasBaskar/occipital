@@ -1,9 +1,25 @@
+print("Starting imports...")
 import cv2
+import numpy as np
+print("cv2, numpy - done.")
 import time
 import math
-from ultralytics import YOLO
-import numpy as np
 import os
+print("utils - done.")
+from ultralytics import YOLO
+print("ultralytics - done.")
+from V5comm import Detection, V5SerialComms, AIRecord
+print("V5comm - done.")
+print("Imports complete.\n")
+
+import RPi.GPIO as GPIO
+GPIO.setmode(GPIO.BCM)
+
+GPIO.setup(17, GPIO.OUT)
+
+GPIO.output(17, GPIO.HIGH)
+time.sleep(1.0)
+GPIO.output(17, GPIO.LOW)
 
 print("Constructing camera instance.")
 
@@ -25,20 +41,20 @@ VFOV = 55
 def HDISTORTION_CORRECTION(angle):
     return (1.0 / math.cos(0.5 * angle)) ** 1.5
 
-class Detection:
-    def __init__(self, cls, tx_l, tx_r, d, h):
-        self.cls = cls
-        self.tx_l = tx_l
-        self.tx_r = tx_r
-        self.d = d
-        self.h = h
+comms = V5SerialComms()
+time.sleep(1)
+comms.start()
+
+GPIO.output(17, GPIO.HIGH)
 
 ctr = 0
 tctr = time.time()
-print("Starting...")
+print("\nStarting...")
 while True:
     ctr += 1
+    t = time.time()
     ret, frame = cap.read()
+    get_frame_time = time.time()
 
     if not ret:
         print("Error obtaining frame, retrying...")
@@ -68,7 +84,9 @@ while True:
 
     # frame = cv2.cvtColor(frame, cv2.COLOR_HSV2BGR)
 
+    GPIO.output(17, GPIO.HIGH)
     results = model(frame, conf=0.25, imgsz=256, half=True)
+    GPIO.output(17, GPIO.LOW)
 
     mgdets = []
     detections = []
@@ -97,7 +115,7 @@ while True:
 
             print(f"Class {int(cls)}, Dist: {d_ground:.1f}, Height: {height:.1f}, Pxh: {y}")
 
-            det = Detection(cls, tx_l, tx_r, d_ground, height)
+            det = Detection(int(cls), tx_l, tx_r, d_ground, height, 0.0)
             if cls == 2:
                 mgdets.append(det)
             else:
@@ -116,6 +134,12 @@ while True:
             detections_parsed.append(det)
 
     detections_parsed += mgdets
+
+    for det in detections_parsed:
+        det.cam_latency = time.time() - t
+
+    record = AIRecord(detections_parsed)
+    comms.setDetectionData(record)
 
     print(detections_parsed)
 

@@ -6,77 +6,43 @@ import json
 from json import JSONEncoder
 import serial
 import time
-from V5Position import Position
-    
-class ImageDetection:
-    def __init__(self, x: int, y: int, width: int, height: int):
-        # Initialize properties of ImageDetection class for x, y coordinates, width, and height
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
 
-    def to_Serial(self):
-        # Convert ImageDetection properties to serialized binary format
-        return struct.pack('<iiii', self.x, self.y, self.width, self.height)
-    
-    def to_JSON(self):
-        # Convert ImageDetection properties to JSON format
-        return self.__dict__
-
-class MapDetection:
-    def __init__(self, x: float, y: float, z: float):
-        # Initialize properties of MapDetection class for x, y, z coordinates
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def to_Serial(self):
-        # Convert MapDetection properties to serialized binary format
-        return struct.pack('<fff', self.x, self.y, self.z)
-    
-    def to_JSON(self):
-        # Convert MapDetection properties to JSON format
-        return self.__dict__
-    
 class Detection:
-    def __init__(self, classID: int, probability: float, depth: float, screenLocation: ImageDetection, mapLocation: MapDetection):
-        # Initialize properties of Detection class, including class ID, probability, depth, and locations on screen and on the field
-        self.classID = classID
-        self.probability = probability
-        self.depth = depth
-        self.screenLocation = screenLocation
-        self.mapLocattion = mapLocation
+    def __init__(self, cls: int, tx_l: float, tx_r: float, d: float, h: float, cam_latency: float):
+        self.cls = cls
+        self.tx_l = tx_l
+        self.tx_r = tx_r
+        self.d = d
+        self.h = h
+        self.cam_latency = cam_latency
+
 
     def to_Serial(self):
         # Convert Detection properties to serialized binary format
-        data = struct.pack('<iff', self.classID, self.probability, self.depth)
-        data += self.screenLocation.to_Serial()
-        data += self.mapLocattion.to_Serial()
+        data = struct.pack('<ifffff', self.cls, self.tx_l, self.tx_r, self.d, self.h, self.cam_latency)
         return data
     
     def to_JSON(self):
         # Convert Detection properties to JSON format
         outData = {}
-        outData['class'] = self.classID
-        outData['prob'] = self.probability
-        outData['depth'] = self.depth
-        outData['screenLocation'] = self.screenLocation.to_JSON()
-        outData['mapLocation'] = self.mapLocattion.to_JSON()
+        outData['cls'] = self.cls
+        outData['tx_l'] = self.tx_l
+        outData['tx_r'] = self.tx_r
+        outData['d'] = self.d
+        outData['h'] = self.h
+        outData['cam_latency'] = self.cam_latency
         return outData
 
 
 class AIRecord:
     # The AIRecord is what is communicated from the Jetson to the V5 Brain as a detection
-    def __init__(self, position: Position, detections: "list[Detection]"):
+    def __init__(self, detections: "list[Detection]"):
         # Initialize properties of AIRecord class, including position and detections list
-        self.position = position
         self.detections = detections
 
     def to_Serial(self):
         # Convert AIRecord properties to serialized binary format
         data = struct.pack('<i', len(self.detections))
-        data += self.position.to_Serial()
         for det in self.detections:
             data += det.to_Serial()
         return data
@@ -84,7 +50,6 @@ class AIRecord:
     def to_JSON(self):
         # Convert AIRecord properties to JSON format
         outData = {}
-        outData['position'] = self.position.to_JSON()
         outData['detections'] = [det.to_JSON() for det in self.detections]
         return outData
 
@@ -142,7 +107,7 @@ class V5SerialComms:
         self.__dev = port
         self.__started = False
         self.__ser = None
-        self.__detections = AIRecord(Position(0, 0, 0, 0, 0, 0, 0, 0), [])
+        self.__detections = AIRecord([])
         self.__detectionLock = Lock()
 
     def start(self):
@@ -153,7 +118,6 @@ class V5SerialComms:
         self.__thread.start()
 
     def __run(self):
-        count = 1
         while self.__started:  # Continue running while the thread is started
             port = self.__dev
             try:
@@ -163,21 +127,17 @@ class V5SerialComms:
                     devices = [dev for dev in comports() if "V5" in dev.description and "User" in dev.description]
                     # self.devices = [dev for dev in comports()]
                     # print(self.devices)
-                    if(len(devices) == 0 and count <= 5):
+                    if(len(devices) == 0):
                         print("No V5 Brain detected.")
-                        time.sleep(1)  # Wait for 1 second before retrying
-                        count += 1
+                        time.sleep(1)
                         continue
-                    elif(count > 5):
-                        return None  # Return None if no devices found after 5 tries
-                        break
                     else:
-                        port = devices[0].device  # Return None if no devices found after 3 tries
+                        port = devices[0].device 
                     
                 print("Connecting to ", port)
 
                 # Establish serial connection with the port
-                self.__ser = serial.Serial(port, 115200, timeout=10)
+                self.__ser = serial.Serial(port, 230400, timeout=10)
                 self.__ser.flushInput()
                 self.__ser.flushOutput()
 
